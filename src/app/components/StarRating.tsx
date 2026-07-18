@@ -1,6 +1,10 @@
 import { Star, StarHalf } from "lucide-react"
 
-export default function StarRating({ rating }) {
+interface StarRatingProps {
+    rating: number
+}
+
+export default function StarRating({ rating }: StarRatingProps) {
     const fullStars = Math.floor(rating)
     const hasHalfStar = rating % 1 >= 0.1
 
