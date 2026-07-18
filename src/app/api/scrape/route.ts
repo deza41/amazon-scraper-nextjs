@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ClientResponseError } from "pocketbase";
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase";
-import { scrapeAmazonProduct, ScraperBlockedError, ScraperConfigError } from "@/lib/scraper";
+import { scrapeAmazonProduct, ScraperBlockedError } from "@/lib/scraper";
 
 export async function POST(req: Request) {
     try {
@@ -32,10 +32,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ product: record }, { status: 200 });
     } catch (error) {
-        if (error instanceof ScraperConfigError) {
-            console.error("Scraper misconfigured:", error.message);
-            return NextResponse.json({ error: error.message }, { status: 500 });
-        }
         if (error instanceof ScraperBlockedError) {
             console.error("Scraping blocked:", error.message);
             return NextResponse.json({ error: error.message }, { status: 502 });

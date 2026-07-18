@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { load } from "cheerio";
-import { fetchAmazonHtml, ScraperConfigError } from "@/lib/scraper";
+import { fetchAmazonHtml } from "@/lib/scraper";
 
 const AMAZON_HOST_PATTERN = /(^|\.)amazon\.[a-z.]{2,}$/i;
 
@@ -73,10 +73,6 @@ export async function GET(req: Request) {
             },
         });
     } catch (error) {
-        if (error instanceof ScraperConfigError) {
-            console.error("Scraper misconfigured:", error.message);
-            return NextResponse.json({ error: error.message }, { status: 500 });
-        }
         console.error("Amazon proxy error:", error);
         return NextResponse.json({ error: "Failed to load the requested Amazon page" }, { status: 502 });
     }

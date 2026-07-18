@@ -19,32 +19,33 @@ function sleep(ms: number) {
 }
 
 export class ScraperBlockedError extends Error {
-    constructor(url: string, cause?: unknown) {
+    constructor(url: string, cause?: unknown, usedApiKey = true) {
         const causeMessage = cause instanceof Error ? cause.message : undefined;
-        super(
-            causeMessage
-                ? `Amazon blocked scraping requests for ${url} after retrying with rendering enabled (last error: ${causeMessage})`
-                : `Amazon blocked scraping requests for ${url} after retrying with rendering enabled`
-        );
+        const parts = [
+            `Amazon blocked scraping requests for ${url} after retrying${usedApiKey ? " with rendering enabled" : ""}.`,
+        ];
+        if (causeMessage) parts.push(`Last error: ${causeMessage}.`);
+        if (!usedApiKey) {
+            parts.push(
+                "No SCRAPER_API key is configured, so requests were sent directly and are blocked more easily — set SCRAPER_API for better reliability."
+            );
+        }
+        super(parts.join(" "));
         this.name = "ScraperBlockedError";
         this.cause = cause;
     }
 }
 
-export class ScraperConfigError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "ScraperConfigError";
-    }
-}
-
+// Generic CAPTCHA/block-page signals that apply to any Amazon page (product,
+// homepage, search, etc.) — NOT a check for product-specific markup, since
+// fetchAmazonHtml is shared with the amazon-proxy route which loads any page.
 function looksBlocked(html: string) {
     if (!html || html.length < 2000) return true;
     const lower = html.toLowerCase();
     if (lower.includes("enter the characters you see below")) return true;
     if (lower.includes("robot check")) return true;
     if (lower.includes("api-services-support@amazon.com")) return true;
-    if (!lower.includes("id=\"producttitle\"") && !lower.includes("id='producttitle'")) return true;
+    if (lower.includes("awswaf.com") || lower.includes("awswafintegration")) return true;
     return false;
 }
 
@@ -52,9 +53,7 @@ interface FetchOptions {
     render: boolean;
 }
 
-async function fetchAmazonHtmlOnce(url: string, { render }: FetchOptions): Promise<string> {
-    const apiKey = process.env.SCRAPER_API as string;
-
+async function fetchViaScraperApi(url: string, apiKey: string, { render }: FetchOptions): Promise<string> {
     const params = new URLSearchParams({
         api_key: apiKey,
         url,
@@ -72,35 +71,54 @@ async function fetchAmazonHtmlOnce(url: string, { render }: FetchOptions): Promi
     return response.data as string;
 }
 
+function requiresPaidPlan(err: unknown): boolean {
+    if (!axios.isAxiosError(err) || err.response?.status !== 403) return false;
+    const data = err.response.data;
+    const message = typeof data === "string" ? data : JSON.stringify(data ?? "");
+    return message.toLowerCase().includes("paid plan");
+}
+
+async function fetchDirect(url: string): Promise<string> {
+    const response = await axios.get(url, {
+        headers: {
+            "User-Agent": randomUserAgent(),
+            "Accept-Language": "en-US,en;q=0.9",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        },
+        timeout: 30000,
+    });
+    return response.data as string;
+}
+
 /**
- * Fetches an Amazon page's HTML, retrying with backoff, then escalating to
- * ScraperAPI's render=true (real headless browser) tier if plain requests
- * keep coming back blocked/CAPTCHA'd.
+ * Fetches an Amazon page's HTML, retrying with backoff. When SCRAPER_API is
+ * configured, escalates to ScraperAPI's render=true (real headless browser)
+ * tier if plain requests keep coming back blocked/CAPTCHA'd. Without a key,
+ * falls back to fetching Amazon directly (free, but blocked more easily since
+ * requests come from this server's own IP instead of a rotated proxy pool).
  */
 export async function fetchAmazonHtml(url: string): Promise<string> {
-    if (!process.env.SCRAPER_API) {
-        throw new ScraperConfigError(
-            "SCRAPER_API environment variable is not set. Add it to .env.local for local development, or to your deployment's environment variables."
-        );
-    }
-
-    const attempts: FetchOptions[] = [
-        { render: false },
-        { render: false },
-        { render: true },
-        { render: true },
-    ];
+    let apiKey = process.env.SCRAPER_API;
+    const attempts: FetchOptions[] = apiKey
+        ? [{ render: false }, { render: false }, { render: true }, { render: true }]
+        : [{ render: false }, { render: false }, { render: false }, { render: false }];
 
     let lastError: unknown;
     for (let i = 0; i < attempts.length; i++) {
         try {
-            const html = await fetchAmazonHtmlOnce(url, attempts[i]);
+            const html = apiKey
+                ? await fetchViaScraperApi(url, apiKey, attempts[i])
+                : await fetchDirect(url);
             if (!looksBlocked(html)) {
                 return html;
             }
             lastError = new Error("Response looked like a block/CAPTCHA page");
         } catch (err) {
             lastError = err;
+            if (apiKey && requiresPaidPlan(err)) {
+                console.warn(`SCRAPER_API key can't access ${url} (requires a paid plan) — falling back to direct requests`);
+                apiKey = undefined;
+            }
         }
 
         if (i < attempts.length - 1) {
@@ -109,7 +127,7 @@ export async function fetchAmazonHtml(url: string): Promise<string> {
     }
 
     console.error(`Failed to fetch ${url}:`, lastError);
-    throw new ScraperBlockedError(url, lastError);
+    throw new ScraperBlockedError(url, lastError, Boolean(apiKey));
 }
 
 function cleanPrice(text: string): number | null {
