@@ -1,19 +1,9 @@
 import { NextResponse } from "next/server";
 import { load } from "cheerio";
 import { fetchAmazonHtml } from "@/lib/scraper";
+import { isAllowedAmazonUrl } from "@/lib/amazon-url";
 
 const AMAZON_HOST_PATTERN = /(^|\.)amazon\.[a-z.]{2,}$/i;
-
-function isAllowedAmazonUrl(value: string): URL | null {
-    try {
-        const parsed = new URL(value);
-        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
-        if (!AMAZON_HOST_PATTERN.test(parsed.hostname)) return null;
-        return parsed;
-    } catch {
-        return null;
-    }
-}
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);

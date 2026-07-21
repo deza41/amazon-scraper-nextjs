@@ -2,13 +2,25 @@ import { NextResponse } from "next/server";
 import { ClientResponseError } from "pocketbase";
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase";
 import { scrapeAmazonProduct, ScraperBlockedError } from "@/lib/scraper";
+import { isAllowedAmazonUrl, normalizeAmazonUrl } from "@/lib/amazon-url";
 
 export async function POST(req: Request) {
+    const secret = process.env.SCRAPE_SECRET;
+    if (secret && req.headers.get("x-scrape-secret") !== secret) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     try {
-        const { url } = await req.json();
-        if (!url) {
+        const { url: rawUrl } = await req.json();
+        if (!rawUrl) {
             return NextResponse.json({ error: "url is required" }, { status: 400 });
         }
+
+        const parsedUrl = isAllowedAmazonUrl(rawUrl);
+        if (!parsedUrl) {
+            return NextResponse.json({ error: "Only amazon.* product URLs are allowed" }, { status: 400 });
+        }
+        const url = normalizeAmazonUrl(parsedUrl);
 
         const scraped = await scrapeAmazonProduct(url);
 

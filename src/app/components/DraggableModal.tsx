@@ -80,7 +80,7 @@ export default function DraggableModal({ isOpen, onClose, initialUrl }: Draggabl
                         src={proxiedSrc}
                         className="w-full h-full border-none"
                         title="Amazon Website"
-                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                        sandbox="allow-scripts allow-popups allow-forms"
                         onLoad={() => setCurrentUrl(initialUrl)}
                     />
                 </div>

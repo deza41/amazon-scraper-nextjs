@@ -23,6 +23,11 @@ import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase"
 
 const AMAZON_HOMEPAGE = "https://www.amazon.com.au/"
 
+const scrapeHeaders: HeadersInit = { "Content-Type": "application/json" }
+if (process.env.NEXT_PUBLIC_SCRAPE_SECRET) {
+    scrapeHeaders["x-scrape-secret"] = process.env.NEXT_PUBLIC_SCRAPE_SECRET
+}
+
 function formatPrice(price: number | null) {
     if (price == null) return null
     return `$${price.toFixed(2)}`
@@ -125,7 +130,7 @@ export default function WebScraper() {
         try {
             const response = await fetch("/api/scrape", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: scrapeHeaders,
                 body: JSON.stringify({ url })
             })
 
@@ -179,7 +184,7 @@ export default function WebScraper() {
         try {
             const response = await fetch("/api/scrape", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: scrapeHeaders,
                 body: JSON.stringify({ url: product.url })
             })
 
@@ -214,7 +219,7 @@ export default function WebScraper() {
                 try {
                     const response = await fetch("/api/scrape", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        headers: scrapeHeaders,
                         body: JSON.stringify({ url: product.url }),
                     })
                     if (!response.ok) throw new Error()

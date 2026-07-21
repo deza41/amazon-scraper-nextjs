@@ -1,17 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     reactStrictMode: true,
-    // skipTrailingSlashRedirect: true,
-    async rewrites() {
+    async headers() {
         return [
             {
-                source: '/github-web',
-                destination: 'https://github.com',
+                source: '/:path*',
+                headers: [
+                    { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+                    { key: 'X-Content-Type-Options', value: 'nosniff' },
+                    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+                    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+                ],
             },
-            {
-                source: '/api/superset/:chart',
-                destination: 'https://superset.datatest.ch/superset/dashboard/:chart/?standalone=3'
-            }
         ]
     },
 };

@@ -46,8 +46,13 @@ async function runPool(products: ProductRecord[], concurrency: number, deadline:
 }
 
 export async function GET(req: Request) {
+    if (!process.env.CRON_SECRET) {
+        console.error("CRON_SECRET is not configured — refusing to run refresh-products");
+        return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
+
     const authHeader = req.headers.get("authorization");
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -62,6 +67,5 @@ export async function GET(req: Request) {
         attempted: results.length,
         succeeded,
         failed: failed.length,
-        errors: failed,
     });
 }

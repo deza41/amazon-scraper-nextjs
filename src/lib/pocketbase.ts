@@ -1,7 +1,9 @@
 import PocketBase, { type RecordModel } from "pocketbase";
 
-const POCKETBASE_URL =
-    process.env.NEXT_PUBLIC_POCKETBASE_URL || "https://straight-gass.pockethost.io";
+const POCKETBASE_URL = process.env.NEXT_PUBLIC_POCKETBASE_URL;
+if (!POCKETBASE_URL) {
+    throw new Error("NEXT_PUBLIC_POCKETBASE_URL is not set");
+}
 
 export const pb = new PocketBase(POCKETBASE_URL);
 
