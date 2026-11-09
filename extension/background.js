@@ -96,6 +96,13 @@ async function fetchDirect(url) {
     }
 }
 
+// Interstitials (Cloudflare "Just a moment", DataDome "Please enable JS", Imperva "Pardon our
+// interruption") are tiny pages that replace themselves once the browser passes the check.
+function looksLikeChallenge(page) {
+    if (BLOCK_TITLE.test(page.title || "")) return true;
+    return page.html.length < 8000 && /captcha|robot|datadome|_incapsula|enable js|pardon our interruption|just a moment/i.test(page.html);
+}
+
 function waitForTabLoad(tabId) {
     return new Promise((resolve) => {
         const done = () => {
@@ -134,7 +141,7 @@ async function fetchInTab(url) {
             } catch {
                 // the tab was navigating when we asked; try again shortly
             }
-            const stillChallenge = !page || BLOCK_TITLE.test(page.title || "");
+            const stillChallenge = !page || looksLikeChallenge(page);
             if (!stillChallenge || Date.now() >= deadline) break;
             await sleep(1000);
         }

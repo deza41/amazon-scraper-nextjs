@@ -5,6 +5,9 @@ import { upsertProduct } from "@/lib/save-product";
 import { parseProductUrl, normalizeProductUrl } from "@/lib/sites";
 import { UnsafeUrlError } from "@/lib/safe-fetch";
 
+// Protected stores can take ScraperAPI up to ~a minute; this is the Vercel function time limit.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
     const secret = process.env.SCRAPE_SECRET;
     if (secret && req.headers.get("x-scrape-secret") !== secret) {

@@ -65,9 +65,16 @@ async function fetchShopifyJson(pageUrl: string) {
     }
 }
 
+// Protected sites (DataDome, Imperva, Cloudflare...) can take ScraperAPI 30-60s to get through,
+// so providers get most of the function's time budget. Vercel caps /api/scrape at 60s.
+const SERVER_BUDGET_MS = 57_000;
+const MIN_PROVIDER_TIME_MS = 10_000;
+
 interface Provider {
     name: string;
-    run: (url: string) => Promise<string>;
+    /** Longest this tier may take; it's further capped by what's left of the overall budget. */
+    maxTimeoutMs: number;
+    run: (url: string, timeoutMs: number) => Promise<string>;
 }
 
 async function getText(requestUrl: string, headers: Record<string, string>, timeout: number): Promise<string> {
@@ -84,10 +91,11 @@ function configuredProviders(): Provider[] {
         for (const render of [false, true]) {
             providers.push({
                 name: render ? "ScraperAPI (rendered)" : "ScraperAPI",
-                run: (url) => {
+                maxTimeoutMs: render ? 70_000 : 55_000,
+                run: (url, timeoutMs) => {
                     const params = new URLSearchParams({ api_key: scraperApiKey, url, keep_headers: "true" });
                     if (render) params.set("render", "true");
-                    return getText(`http://api.scraperapi.com?${params.toString()}`, {}, render ? 60000 : 30000);
+                    return getText(`http://api.scraperapi.com?${params.toString()}`, {}, timeoutMs);
                 },
             });
         }
@@ -103,7 +111,8 @@ function isProviderRejection(err: unknown): boolean {
 
 async function viaProviders(
     url: string,
-    providers: Provider[]
+    providers: Provider[],
+    deadline: number
 ): Promise<{ result: ExtractResult | null; error?: unknown; loadedPage: boolean }> {
     let lastError: unknown;
     let loadedPage = false;
@@ -112,8 +121,10 @@ async function viaProviders(
         // "ScraperAPI" and "ScraperAPI (rendered)" share one key/plan.
         const family = provider.name.split(" (")[0];
         if (rejected.has(family)) continue;
+        const remaining = deadline - Date.now();
+        if (remaining < MIN_PROVIDER_TIME_MS) break; // not enough time left to give another tier a fair try
         try {
-            const html = await provider.run(url);
+            const html = await provider.run(url, Math.min(provider.maxTimeoutMs, remaining));
             loadedPage = true;
             const result = evaluate(html, url);
             if (result) return { result, loadedPage };
@@ -127,6 +138,7 @@ async function viaProviders(
 }
 
 export async function scrapeWebProduct(url: string): Promise<ScrapedProduct> {
+    const deadline = Date.now() + SERVER_BUDGET_MS;
     const providers = configuredProviders();
     const direct = await directFetch(url);
 
@@ -159,7 +171,7 @@ export async function scrapeWebProduct(url: string): Promise<ScrapedProduct> {
     let providerLoadedPage = false;
     if (!extracted && worthEscalating && providers.length > 0) {
         usedApi = true;
-        const viaApi = await viaProviders(url, providers);
+        const viaApi = await viaProviders(url, providers, deadline);
         extracted = viaApi.result;
         apiError = viaApi.error;
         providerLoadedPage = viaApi.loadedPage;
@@ -174,8 +186,11 @@ export async function scrapeWebProduct(url: string): Promise<ScrapedProduct> {
                     `${host} blocked the request (bot protection). Set SCRAPER_API to route blocked sites through ScraperAPI.`
                 );
             }
+            const timedOut = axios.isAxiosError(apiError) && (apiError.code === "ECONNABORTED" || apiError.code === "ETIMEDOUT");
             throw new SiteBlockedError(
-                `${host} blocked the request, even through your configured scraping providers${apiError instanceof Error ? ` (${apiError.message})` : ""}. Your plan may not cover this site.`,
+                timedOut
+                    ? `${host} is heavily bot-protected and the scraping service timed out getting through. Trying again may work.`
+                    : `${host} blocked the request, even through your configured scraping providers${apiError instanceof Error ? ` (${apiError.message})` : ""}. Your plan may not cover this site.`,
                 apiError
             );
         }
