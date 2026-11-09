@@ -1,4 +1,4 @@
-// Bridge between the Web Scraper page and this extension's background worker.
+// Bridge between the Shopping Scraper page and this extension's background worker.
 // It only runs on the app's own origin (see "matches" in manifest.json, which the app's
 // download endpoint sets to the site you downloaded the extension from).
 (() => {

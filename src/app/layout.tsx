@@ -18,7 +18,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Web Scraper",
+  title: "Shopping Scraper",
   description: "Track prices and details from any online store.",
   icons: {
     icon: "/favicon.ico",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Web Scraper",
+    title: "Shopping Scraper",
   },
 };
 

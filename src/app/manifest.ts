@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: "Web Scraper",
-        short_name: "Scraper",
+        name: "Shopping Scraper",
+        short_name: "Shopping",
         description: "Track prices and details from any online store.",
         start_url: "/",
         display: "standalone",

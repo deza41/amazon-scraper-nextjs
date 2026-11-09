@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const EXTENSION_DIR = path.join(process.cwd(), "extension");
-const ZIP_FOLDER = "web-scraper-helper";
+const ZIP_FOLDER = "shopping-scraper-helper";
 
 async function listFiles(dir: string, prefix = ""): Promise<string[]> {
     const entries = await fs.readdir(dir, { withFileTypes: true });

@@ -1,4 +1,4 @@
-// Talks to the optional "Web Scraper Helper" browser extension (see /extension).
+// Talks to the optional "Shopping Scraper Helper" browser extension (see /extension).
 // The extension's content script runs on this site only. It marks <html data-ws-helper="version">
 // (instant detection) and relays window.postMessage requests to its background worker, which can
 // fetch pages as the user's own browser (their IP, cookies and real browser fingerprint).

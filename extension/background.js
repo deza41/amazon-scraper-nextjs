@@ -1,5 +1,5 @@
-// Web Scraper Helper — background service worker.
-// Fetches product pages on behalf of the Web Scraper app, using this browser (your IP, your
+// Shopping Scraper Helper — background service worker.
+// Fetches product pages on behalf of the Shopping Scraper app, using this browser (your IP, your
 // cookies, a real browser fingerprint). It only answers the app's own origin.
 
 const VERSION = chrome.runtime.getManifest().version;

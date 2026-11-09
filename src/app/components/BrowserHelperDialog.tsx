@@ -103,13 +103,13 @@ export default function BrowserHelperDialog({ open, onOpenChange, onVersionChang
                             <Button asChild size="sm" variant={installed ? "outline" : "brand"}>
                                 <a href={EXTENSION_DOWNLOAD_URL} download>
                                     <Download />
-                                    Download web-scraper-helper.zip
+                                    Download shopping-scraper-helper.zip
                                 </a>
                             </Button>
                         </Step>
                         <Step n={2}>
                             <p>
-                                Unzip it and keep the <code className="rounded bg-muted px-1 py-0.5 text-xs">web-scraper-helper</code> folder
+                                Unzip it and keep the <code className="rounded bg-muted px-1 py-0.5 text-xs">shopping-scraper-helper</code> folder
                                 somewhere permanent. Chrome loads the extension from that folder, so don&apos;t delete it.
                             </p>
                         </Step>
@@ -125,7 +125,7 @@ export default function BrowserHelperDialog({ open, onOpenChange, onVersionChang
                         </Step>
                         <Step n={4}>
                             <p>
-                                Click <strong>Load unpacked</strong> and choose the unzipped <code className="rounded bg-muted px-1 py-0.5 text-xs">web-scraper-helper</code> folder.
+                                Click <strong>Load unpacked</strong> and choose the unzipped <code className="rounded bg-muted px-1 py-0.5 text-xs">shopping-scraper-helper</code> folder.
                             </p>
                         </Step>
                         <Step n={5}>
