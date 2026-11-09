@@ -9,6 +9,14 @@ export class SiteScrapeError extends Error {
     }
 }
 
+/** The site refused or rate-limited the request (as opposed to "this isn't a product page"). */
+export class SiteBlockedError extends SiteScrapeError {
+    constructor(message: string, cause?: unknown) {
+        super(message, cause);
+        this.name = "SiteBlockedError";
+    }
+}
+
 export const MAX_DESCRIPTION_LENGTH = 1500;
 export const MAX_FEATURES = 15;
 

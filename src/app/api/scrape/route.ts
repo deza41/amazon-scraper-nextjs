@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { ClientResponseError } from "pocketbase";
-import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase";
 import { ScraperBlockedError } from "@/lib/scraper";
-import { scrapeProduct, SiteScrapeError } from "@/lib/scrape-product";
+import { scrapeProduct, SiteBlockedError, SiteScrapeError } from "@/lib/scrape-product";
+import { upsertProduct } from "@/lib/save-product";
 import { parseProductUrl, normalizeProductUrl } from "@/lib/sites";
 import { UnsafeUrlError } from "@/lib/safe-fetch";
 
@@ -23,33 +22,20 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Enter a valid http(s) product URL" }, { status: 400 });
         }
 
-        const url = normalizeProductUrl(rawUrl);
-        const scraped = await scrapeProduct(url);
-
-        let record: ProductRecord;
-        try {
-            const existing = await pb
-                .collection(PRODUCTS_COLLECTION)
-                .getFirstListItem<ProductRecord>(pb.filter("url = {:url}", { url }));
-            record = await pb
-                .collection(PRODUCTS_COLLECTION)
-                .update<ProductRecord>(existing.id, { ...scraped, is_refreshed: true });
-        } catch (err) {
-            if (err instanceof ClientResponseError && err.status === 404) {
-                record = await pb
-                    .collection(PRODUCTS_COLLECTION)
-                    .create<ProductRecord>({ ...scraped, is_refreshed: true });
-            } else {
-                throw err;
-            }
-        }
+        const scraped = await scrapeProduct(normalizeProductUrl(rawUrl));
+        const record = await upsertProduct(scraped);
 
         return NextResponse.json({ product: record }, { status: 200 });
     } catch (error) {
         if (error instanceof UnsafeUrlError) {
             return NextResponse.json({ error: error.message }, { status: 400 });
         }
-        if (error instanceof ScraperBlockedError || error instanceof SiteScrapeError) {
+        if (error instanceof ScraperBlockedError || error instanceof SiteBlockedError) {
+            // code: "blocked" tells the client it can retry from the user's own machine (local helper).
+            console.error("Scraping blocked:", error.message);
+            return NextResponse.json({ error: error.message, code: "blocked" }, { status: 502 });
+        }
+        if (error instanceof SiteScrapeError) {
             console.error("Scraping failed:", error.message);
             return NextResponse.json({ error: error.message }, { status: 502 });
         }

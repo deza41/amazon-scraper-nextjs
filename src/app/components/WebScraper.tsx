@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, type FormEvent } from "react"
 import { toast } from "sonner"
-import { Search, Trash2, RefreshCw, Link as LinkIcon, List, LayoutGrid, ExternalLink, PackageSearch } from "lucide-react"
+import { Search, Trash2, RefreshCw, Link as LinkIcon, List, LayoutGrid, ExternalLink, PackageSearch, Puzzle } from "lucide-react"
 import StarRating from "./StarRating"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,9 @@ import { motion, AnimatePresence } from "framer-motion"
 import DraggableModal from "./DraggableModal"
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase"
 import { storeNameFromUrl } from "@/lib/sites"
+import { NoHelperError, scrapeProductUrl } from "@/lib/scrape-client"
+import { getExtensionVersion } from "@/lib/extension-bridge"
+import BrowserHelperDialog from "./BrowserHelperDialog"
 
 const AMAZON_HOMEPAGE = "https://www.amazon.com.au/"
 
@@ -55,11 +58,6 @@ function productCurrency(product: ProductRecord | null) {
     return typeof value === "string" ? value : undefined
 }
 
-const scrapeHeaders: HeadersInit = { "Content-Type": "application/json" }
-if (process.env.NEXT_PUBLIC_SCRAPE_SECRET) {
-    scrapeHeaders["x-scrape-secret"] = process.env.NEXT_PUBLIC_SCRAPE_SECRET
-}
-
 function formatPrice(price: number | null, currency?: string) {
     if (price == null) return null
     if (currency && /^[A-Z]{3}$/.test(currency)) {
@@ -83,9 +81,33 @@ export default function WebScraper() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [listView, setListView] = useState(false)
     const [isUrlModalOpen, setIsUrlModalOpen] = useState(false)
+    const [helperVersion, setHelperVersion] = useState<string | null>(null)
+    const [helperDialogOpen, setHelperDialogOpen] = useState(false)
     const modalRef = useRef<HTMLDivElement>(null)
 
     const closeModal = useCallback(() => setSelectedProduct(null), [])
+
+    // Optional browser extension: detect it on load and whenever the user returns to this tab
+    // (e.g. after installing it from chrome://extensions).
+    useEffect(() => {
+        const check = () => setHelperVersion(getExtensionVersion())
+        check()
+        window.addEventListener("focus", check)
+        return () => window.removeEventListener("focus", check)
+    }, [])
+
+    // A blocked scrape with no helper set up gets a "Set up" shortcut. Nothing else nags about it.
+    const reportError = (err: unknown, fallback: string) => {
+        const message = err instanceof Error ? err.message : fallback
+        if (err instanceof NoHelperError) {
+            toast.error(message, {
+                duration: 12000,
+                action: { label: "Set up", onClick: () => setHelperDialogOpen(true) },
+            })
+        } else {
+            toast.error(message)
+        }
+    }
 
     useEffect(() => {
         async function loadProducts() {
@@ -167,21 +189,12 @@ export default function WebScraper() {
         setLoading(true)
 
         try {
-            const response = await fetch("/api/scrape", {
-                method: "POST",
-                headers: scrapeHeaders,
-                body: JSON.stringify({ url })
-            })
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}))
-                throw new Error(data.error || "Failed to scrape the website")
-            }
+            const { viaLocalHelper } = await scrapeProductUrl(url, "Failed to scrape the website")
 
             setUrl("")
-            toast.success("Product scraped successfully")
+            toast.success(viaLocalHelper ? "Product scraped using your own machine" : "Product scraped successfully")
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : "An error occurred while scraping the website")
+            reportError(err, "An error occurred while scraping the website")
         } finally {
             setLoading(false)
         }
@@ -221,22 +234,11 @@ export default function WebScraper() {
     const refreshProduct = async (product: ProductRecord) => {
         setLoading(true)
         try {
-            const response = await fetch("/api/scrape", {
-                method: "POST",
-                headers: scrapeHeaders,
-                body: JSON.stringify({ url: product.url })
-            })
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}))
-                throw new Error(data.error || "Failed to refresh the product")
-            }
-
-            const { product: refreshed } = await response.json()
+            const { product: refreshed, viaLocalHelper } = await scrapeProductUrl(product.url, "Failed to refresh the product")
             setSelectedProduct(refreshed)
-            toast.success("Product refreshed")
+            toast.success(viaLocalHelper ? "Product refreshed using your own machine" : "Product refreshed")
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : "An error occurred while refreshing the product")
+            reportError(err, "An error occurred while refreshing the product")
         } finally {
             setLoading(false)
         }
@@ -256,12 +258,7 @@ export default function WebScraper() {
                 const product = queue.shift()
                 if (!product) break
                 try {
-                    const response = await fetch("/api/scrape", {
-                        method: "POST",
-                        headers: scrapeHeaders,
-                        body: JSON.stringify({ url: product.url }),
-                    })
-                    if (!response.ok) throw new Error()
+                    await scrapeProductUrl(product.url)
                     succeeded += 1
                 } catch {
                     failed += 1
@@ -304,6 +301,26 @@ export default function WebScraper() {
                                 Track prices and details from any online store. Just paste a product link.
                             </p>
                         </div>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="sm:ml-auto"
+                                    onClick={() => setHelperDialogOpen(true)}
+                                >
+                                    <Puzzle />
+                                    Browser helper
+                                    {helperVersion && <span aria-label="Installed" className="h-2 w-2 rounded-full bg-success" />}
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                {helperVersion
+                                    ? "Installed. Blocked sites are fetched through your browser."
+                                    : "Optional: fetch sites that block our server through your own browser"}
+                            </TooltipContent>
+                        </Tooltip>
                     </header>
 
                     <form onSubmit={handleSubmit} className="mb-10">
@@ -642,6 +659,11 @@ export default function WebScraper() {
                         </DialogContent>
                     </Dialog>
                 </div>
+                <BrowserHelperDialog
+                    open={helperDialogOpen}
+                    onOpenChange={setHelperDialogOpen}
+                    onVersionChange={setHelperVersion}
+                />
                 <DraggableModal
                     isOpen={isUrlModalOpen}
                     onClose={() => setIsUrlModalOpen(false)}

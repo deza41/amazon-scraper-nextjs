@@ -3,7 +3,7 @@ import type { ScrapedProduct } from "./pocketbase";
 import { extractProduct, looksJsRendered, looksLikeShopify, type ExtractResult } from "./page-extract";
 import { safeGet, UnsafeUrlError, type SafeResponse } from "./safe-fetch";
 import { overlayShopify, parseShopifyJson, parseShopifyProduct, shopifyJsonUrl } from "./shopify";
-import { SiteScrapeError } from "./scrape-utils";
+import { SiteBlockedError, SiteScrapeError } from "./scrape-utils";
 
 // Generic product scraper for any public store:
 //   1. fetch the page directly (free, SSRF-protected)
@@ -170,11 +170,11 @@ export async function scrapeWebProduct(url: string): Promise<ScrapedProduct> {
         const host = new URL(url).hostname.replace(/^www\./, "");
         if (directBlocked && !providerLoadedPage) {
             if (providers.length === 0) {
-                throw new SiteScrapeError(
+                throw new SiteBlockedError(
                     `${host} blocked the request (bot protection). Set SCRAPER_API to route blocked sites through ScraperAPI.`
                 );
             }
-            throw new SiteScrapeError(
+            throw new SiteBlockedError(
                 `${host} blocked the request, even through your configured scraping providers${apiError instanceof Error ? ` (${apiError.message})` : ""}. Your plan may not cover this site.`,
                 apiError
             );

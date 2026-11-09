@@ -7,7 +7,7 @@ const outDir = path.resolve(__dirname, "../public/icons");
 
 fs.mkdirSync(outDir, { recursive: true });
 
-async function makeIcon({ size, outName, padRatio, background }) {
+async function makeIcon({ size, outName, padRatio, background, dir = outDir }) {
     const logoWidth = Math.round(size * (1 - padRatio * 2));
     const logoBuffer = await sharp(svgPath, { density: 300 })
         .resize({ width: logoWidth, fit: "inside" })
@@ -32,7 +32,7 @@ async function makeIcon({ size, outName, padRatio, background }) {
             },
         ])
         .png()
-        .toFile(path.join(outDir, outName));
+        .toFile(path.join(dir, outName));
 
     console.log("wrote", outName);
 }
@@ -91,6 +91,13 @@ async function main() {
     const white = { r: 79, g: 70, b: 229, alpha: 1 }; // brand indigo (#4f46e5), glyph is white
 
     await makeFavicon(white);
+
+    // Browser extension icons (extension/manifest.json)
+    const extIconDir = path.resolve(__dirname, "../extension/icons");
+    fs.mkdirSync(extIconDir, { recursive: true });
+    for (const size of [16, 32, 48, 128]) {
+        await makeIcon({ size, outName: `icon-${size}.png`, padRatio: 0.12, background: white, dir: extIconDir });
+    }
 
     // "any" purpose icons: minimal padding, logo fills most of the canvas
     await makeIcon({ size: 192, outName: "icon-192.png", padRatio: 0.1, background: white });
