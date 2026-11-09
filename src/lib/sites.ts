@@ -44,3 +44,17 @@ export function normalizeProductUrl(value: string): string {
     }
     return parsed.toString();
 }
+
+// Stores behind heavy bot protection (DataDome / Imperva): fetching them can take close to a
+// minute even when it works, so the UI warns the user instead of looking frozen.
+const SLOW_SITES: { name: string; host: RegExp }[] = [
+    { name: "Harvey Norman", host: /(^|\.)harveynorman\.com\.au$/i },
+    { name: "Bing Lee", host: /(^|\.)binglee\.com\.au$/i },
+];
+
+/** Name of the slow, heavily protected store this URL belongs to, or null. */
+export function getSlowSiteName(value: string): string | null {
+    const parsed = parseProductUrl(value);
+    if (!parsed) return null;
+    return SLOW_SITES.find((site) => site.host.test(parsed.hostname))?.name ?? null;
+}

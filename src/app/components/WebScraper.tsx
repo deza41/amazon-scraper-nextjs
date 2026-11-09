@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { motion, AnimatePresence } from "framer-motion"
 import DraggableModal from "./DraggableModal"
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase"
-import { storeNameFromUrl } from "@/lib/sites"
+import { getSlowSiteName, storeNameFromUrl } from "@/lib/sites"
 import { NoHelperError, scrapeProductUrl } from "@/lib/scrape-client"
 import { getExtensionVersion } from "@/lib/extension-bridge"
 import BrowserHelperDialog from "./BrowserHelperDialog"
@@ -184,9 +184,21 @@ export default function WebScraper() {
         }
     }, [selectedProduct, isDeleteDialogOpen, closeModal])
 
+    // Heavily protected stores (Harvey Norman, Bing Lee) can take up to a minute, so say so rather
+    // than looking frozen. Returns a function that dismisses the notice.
+    const warnIfSlow = (urls: string[]) => {
+        const names = [...new Set(urls.map(getSlowSiteName).filter((name): name is string => Boolean(name)))]
+        if (names.length === 0) return () => {}
+        const id = toast.loading(
+            `${names.join(" and ")} ${names.length > 1 ? "are" : "is"} heavily protected, so this can take up to a minute. Please keep this tab open.`
+        )
+        return () => toast.dismiss(id)
+    }
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
         setLoading(true)
+        const dismissWarning = warnIfSlow([url])
 
         try {
             const { viaLocalHelper } = await scrapeProductUrl(url, "Failed to scrape the website")
@@ -196,6 +208,7 @@ export default function WebScraper() {
         } catch (err) {
             reportError(err, "An error occurred while scraping the website")
         } finally {
+            dismissWarning()
             setLoading(false)
         }
     }
@@ -233,6 +246,7 @@ export default function WebScraper() {
 
     const refreshProduct = async (product: ProductRecord) => {
         setLoading(true)
+        const dismissWarning = warnIfSlow([product.url])
         try {
             const { product: refreshed, viaLocalHelper } = await scrapeProductUrl(product.url, "Failed to refresh the product")
             setSelectedProduct(refreshed)
@@ -240,6 +254,7 @@ export default function WebScraper() {
         } catch (err) {
             reportError(err, "An error occurred while refreshing the product")
         } finally {
+            dismissWarning()
             setLoading(false)
         }
     }
@@ -247,6 +262,7 @@ export default function WebScraper() {
     const refreshAllProducts = async () => {
         if (products.length === 0) return
         setLoading(true)
+        const dismissWarning = warnIfSlow(products.map((product) => product.url))
 
         const concurrentFetches = 5
         const queue = [...products]
@@ -270,6 +286,7 @@ export default function WebScraper() {
             Array.from({ length: Math.min(concurrentFetches, products.length) }, worker)
         )
 
+        dismissWarning()
         setLoading(false)
         if (failed === 0) {
             toast.success(`Refreshed ${succeeded} product${succeeded === 1 ? '' : 's'}`)
