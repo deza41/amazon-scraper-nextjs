@@ -2,7 +2,7 @@ const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs");
 
-const svgPath = path.resolve(__dirname, "../src/public/amazon.svg");
+const svgPath = path.resolve(__dirname, "icon.svg");
 const outDir = path.resolve(__dirname, "../public/icons");
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -37,8 +37,60 @@ async function makeIcon({ size, outName, padRatio, background }) {
     console.log("wrote", outName);
 }
 
+// Browser tab icon: rounded indigo tile with the white glyph, packed as a multi-size .ico
+// (PNG-compressed entries, supported by all modern browsers). Served by Next from src/app/favicon.ico.
+async function makeFavicon(background) {
+    const sizes = [16, 32, 48];
+    const pngs = [];
+    for (const size of sizes) {
+        const glyphWidth = Math.round(size * 0.76);
+        const glyph = await sharp(svgPath, { density: 400 }).resize({ width: glyphWidth, fit: "inside" }).png().toBuffer();
+        const meta = await sharp(glyph).metadata();
+        const mask = Buffer.from(
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size * 0.24}" fill="#fff"/></svg>`
+        );
+        const png = await sharp({ create: { width: size, height: size, channels: 4, background } })
+            .composite([
+                {
+                    input: glyph,
+                    left: Math.round((size - (meta.width || glyphWidth)) / 2),
+                    top: Math.round((size - (meta.height || glyphWidth)) / 2),
+                },
+                { input: mask, blend: "dest-in" },
+            ])
+            .png()
+            .toBuffer();
+        pngs.push({ size, png });
+    }
+
+    // ICO container: 6-byte header, 16-byte directory entry per image, then the PNG payloads.
+    const header = Buffer.alloc(6);
+    header.writeUInt16LE(0, 0); // reserved
+    header.writeUInt16LE(1, 2); // type: icon
+    header.writeUInt16LE(pngs.length, 4);
+    let offset = 6 + 16 * pngs.length;
+    const entries = pngs.map(({ size, png }) => {
+        const entry = Buffer.alloc(16);
+        entry.writeUInt8(size, 0); // width
+        entry.writeUInt8(size, 1); // height
+        entry.writeUInt16LE(1, 4); // color planes
+        entry.writeUInt16LE(32, 6); // bits per pixel
+        entry.writeUInt32LE(png.length, 8);
+        entry.writeUInt32LE(offset, 12);
+        offset += png.length;
+        return entry;
+    });
+    fs.writeFileSync(
+        path.resolve(__dirname, "../src/app/favicon.ico"),
+        Buffer.concat([header, ...entries, ...pngs.map((p) => p.png)])
+    );
+    console.log("wrote src/app/favicon.ico");
+}
+
 async function main() {
-    const white = { r: 255, g: 255, b: 255, alpha: 1 };
+    const white = { r: 79, g: 70, b: 229, alpha: 1 }; // brand indigo (#4f46e5), glyph is white
+
+    await makeFavicon(white);
 
     // "any" purpose icons: minimal padding, logo fills most of the canvas
     await makeIcon({ size: 192, outName: "icon-192.png", padRatio: 0.1, background: white });

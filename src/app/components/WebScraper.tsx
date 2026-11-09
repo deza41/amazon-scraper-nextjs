@@ -14,20 +14,61 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { motion, AnimatePresence } from "framer-motion"
-import Amazon from '../../public/amazon.svg'
-import Image from "next/image"
 import DraggableModal from "./DraggableModal"
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase"
+import { storeNameFromUrl } from "@/lib/sites"
 
 const AMAZON_HOMEPAGE = "https://www.amazon.com.au/"
+
+function storeLabel(url: string) {
+    return storeNameFromUrl(url) || "store"
+}
+
+// Deterministic per-store accent so each shop is recognisable at a glance,
+// without loading favicons from third parties.
+function storeHue(name: string) {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 360
+    return hash
+}
+
+function StoreChip({ url, className = "" }: { url: string; className?: string }) {
+    const name = storeLabel(url)
+    const hue = storeHue(name)
+    return (
+        <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
+            <span
+                aria-hidden
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold uppercase"
+                style={{ backgroundColor: `hsl(${hue} 70% 93%)`, color: `hsl(${hue} 60% 32%)` }}
+            >
+                {name.charAt(0)}
+            </span>
+            <span className="truncate text-xs font-medium text-muted-foreground">{name}</span>
+        </span>
+    )
+}
+
+/** The scraper stores the ISO currency code in specifications.Currency; older records default to "$". */
+function productCurrency(product: ProductRecord | null) {
+    const value = product?.specifications?.Currency
+    return typeof value === "string" ? value : undefined
+}
 
 const scrapeHeaders: HeadersInit = { "Content-Type": "application/json" }
 if (process.env.NEXT_PUBLIC_SCRAPE_SECRET) {
     scrapeHeaders["x-scrape-secret"] = process.env.NEXT_PUBLIC_SCRAPE_SECRET
 }
 
-function formatPrice(price: number | null) {
+function formatPrice(price: number | null, currency?: string) {
     if (price == null) return null
+    if (currency && /^[A-Z]{3}$/.test(currency)) {
+        try {
+            return new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(price)
+        } catch {
+            // unknown currency code: fall through to the plain format
+        }
+    }
     return `$${price.toFixed(2)}`
 }
 
@@ -244,36 +285,36 @@ export default function WebScraper() {
     const detailRow = "grid gap-1 sm:grid-cols-3 sm:gap-4 py-4 first:pt-0"
     const detailLabel = "text-xs font-medium uppercase tracking-wide text-muted-foreground"
     const detailValue = "text-sm text-foreground sm:col-span-2"
+    const selectedCurrency = productCurrency(selectedProduct)
+    const visibleSpecs = Object.entries(selectedProduct?.specifications ?? {}).filter(([key]) => key !== "Currency")
 
     return (
         <TooltipProvider>
-            <div className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
+            <div className="page-glow min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
                 <div className="max-w-6xl mx-auto">
-                    <header className="flex flex-col items-center text-center mb-8">
-                        <div className="flex items-center gap-3">
-                            <Image
-                                src={Amazon}
-                                alt={'Amazon'}
-                                className="h-9 w-auto mt-2"
-                            />
-                            <h1 className="text-3xl font-semibold tracking-tight">
+                    <header className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-violet-500 text-brand-foreground shadow-lg shadow-brand/25">
+                            <PackageSearch className="h-6 w-6" />
+                        </span>
+                        <div>
+                            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                                 Web Scraper
                             </h1>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Track prices and details from any online store. Just paste a product link.
+                            </p>
                         </div>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            Scrape, track, and browse Amazon products.
-                        </p>
                     </header>
 
-                    <form onSubmit={handleSubmit} className="mb-8">
-                        <Label htmlFor="scrape-url" className="sr-only">Amazon product URL</Label>
-                        <div className="flex items-center gap-2 rounded-2xl border bg-card p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-2 focus-within:ring-ring/30">
+                    <form onSubmit={handleSubmit} className="mb-10">
+                        <Label htmlFor="scrape-url" className="sr-only">Product URL</Label>
+                        <div className="flex items-center gap-2 rounded-2xl border bg-card p-2 shadow-md shadow-brand/5 transition-shadow focus-within:shadow-lg focus-within:shadow-brand/10 focus-within:ring-2 focus-within:ring-ring/30">
                             <Input
                                 id="scrape-url"
                                 type="url"
                                 value={url}
                                 onChange={(e) => setUrl(e.target.value)}
-                                placeholder="Paste an Amazon product URL..."
+                                placeholder="https://store.com/products/..."
                                 required
                                 disabled={loading}
                                 className="h-11 border-none bg-transparent shadow-none focus-visible:ring-0"
@@ -397,21 +438,22 @@ export default function WebScraper() {
                                                             )}
                                                         </div>
                                                         <div className="min-w-0 flex-1 flex flex-col gap-2">
+                                                            <StoreChip url={product.url} />
                                                             <h3 className={`text-sm font-medium leading-snug ${listView ? "line-clamp-1" : "line-clamp-2"}`}>
                                                                 {product.name}
                                                             </h3>
                                                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                                {formatPrice(product.price) && (
-                                                                    <p className="flex items-center gap-2">
+                                                                {formatPrice(product.price, productCurrency(product)) && (
+                                                                    <div className="flex items-center gap-2">
                                                                         <span className="text-lg font-semibold tracking-tight">
-                                                                            {formatPrice(product.price)}
+                                                                            {formatPrice(product.price, productCurrency(product))}
                                                                         </span>
                                                                         {product.savings_percentage && (
-                                                                            <Badge variant="destructive">
+                                                                            <Badge variant="success">
                                                                                 {product.savings_percentage}
                                                                             </Badge>
                                                                         )}
-                                                                    </p>
+                                                                    </div>
                                                                 )}
                                                                 {product.rating && (
                                                                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -428,7 +470,7 @@ export default function WebScraper() {
                                                                     className={`inline-flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors ${listView ? "" : "mt-auto pt-1"}`}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 >
-                                                                    View on Amazon
+                                                                    Open product page
                                                                     <ExternalLink className="h-3 w-3" />
                                                                 </a>
                                                             )}
@@ -458,7 +500,7 @@ export default function WebScraper() {
                             <div>
                                 <p className="font-medium">No products yet</p>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    Paste an Amazon product URL above to start tracking it.
+                                    Paste a product link from any online store above to start tracking it.
                                 </p>
                             </div>
                         </div>
@@ -466,7 +508,8 @@ export default function WebScraper() {
 
                     <Dialog open={selectedProduct !== null} onOpenChange={closeModal}>
                         <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-[640px]" ref={modalRef}>
-                            <DialogHeader className="border-b px-6 py-4 pr-12 text-left">
+                            <DialogHeader className="space-y-2 border-b px-6 py-4 pr-12 text-left">
+                                {selectedProduct?.url && <StoreChip url={selectedProduct.url} />}
                                 <DialogTitle className="line-clamp-2 text-base font-semibold leading-snug">
                                     {selectedProduct?.name}
                                 </DialogTitle>
@@ -486,15 +529,15 @@ export default function WebScraper() {
                                 </div>
 
                                 <div className="divide-y">
-                                    {formatPrice(selectedProduct?.price ?? null) && (
+                                    {formatPrice(selectedProduct?.price ?? null, selectedCurrency) && (
                                         <div className={detailRow}>
                                             <dt className={detailLabel}>Price</dt>
                                             <dd className={`${detailValue} flex items-center gap-2`}>
                                                 <span className="text-lg font-semibold tracking-tight">
-                                                    {formatPrice(selectedProduct?.price ?? null)}
+                                                    {formatPrice(selectedProduct?.price ?? null, selectedCurrency)}
                                                 </span>
                                                 {selectedProduct?.savings_percentage && (
-                                                    <Badge variant="destructive">
+                                                    <Badge variant="success">
                                                         {selectedProduct.savings_percentage}
                                                     </Badge>
                                                 )}
@@ -534,12 +577,12 @@ export default function WebScraper() {
                                         </div>
                                     )}
 
-                                    {selectedProduct?.specifications && Object.keys(selectedProduct.specifications).length > 0 && (
+                                    {visibleSpecs.length > 0 && (
                                         <div className={detailRow}>
                                             <dt className={detailLabel}>Specifications</dt>
                                             <dd className={detailValue}>
                                                 <ul className="space-y-1">
-                                                    {Object.entries(selectedProduct.specifications).map(([key, value]) => (
+                                                    {visibleSpecs.map(([key, value]) => (
                                                         <li key={key}>
                                                             <span className="font-medium">{key}:</span>{" "}
                                                             <span className="text-muted-foreground">{value}</span>
@@ -558,7 +601,7 @@ export default function WebScraper() {
                                         rel="noopener noreferrer"
                                         className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium hover:underline underline-offset-4"
                                     >
-                                        View Product on Amazon
+                                        View on {storeLabel(selectedProduct.url)}
                                         <ExternalLink className="h-3.5 w-3.5" />
                                     </a>
                                 )}

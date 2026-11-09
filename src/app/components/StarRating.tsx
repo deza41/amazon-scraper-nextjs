@@ -15,12 +15,12 @@ export default function StarRating({ rating, className = "w-4 h-4" }: StarRating
                 .fill(0)
                 .map((_, index) => {
                     if (index < fullStars) {
-                        return <Star key={index} className={`${className} text-brand fill-current`} />
+                        return <Star key={index} className={`${className} text-amber-400 fill-current`} />
                     } else if (index === fullStars && hasHalfStar) {
                         return (
                             <span key={index} className="relative inline-flex">
                                 <Star className={`${className} text-muted-foreground/30`} />
-                                <StarHalf className={`${className} text-brand fill-current absolute inset-0`} />
+                                <StarHalf className={`${className} text-amber-400 fill-current absolute inset-0`} />
                             </span>
                         )
                     } else {

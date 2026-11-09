@@ -18,8 +18,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Amazon Web Scraper",
-  description: "Scrape, track, and browse Amazon products.",
+  title: "Web Scraper",
+  description: "Track prices and details from any online store.",
   icons: {
     icon: "/favicon.ico",
     apple: "/icons/apple-touch-icon.png",
@@ -27,12 +27,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Amazon Web Scraper",
+    title: "Web Scraper",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#131921",
+  themeColor: "#4f46e5",
 };
 
 export default function RootLayout({

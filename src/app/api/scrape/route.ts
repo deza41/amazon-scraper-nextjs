@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { ClientResponseError } from "pocketbase";
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase";
-import { scrapeAmazonProduct, ScraperBlockedError } from "@/lib/scraper";
-import { isAllowedAmazonUrl } from "@/lib/amazon-url";
+import { ScraperBlockedError } from "@/lib/scraper";
+import { scrapeProduct, SiteScrapeError } from "@/lib/scrape-product";
+import { parseProductUrl, normalizeProductUrl } from "@/lib/sites";
+import { UnsafeUrlError } from "@/lib/safe-fetch";
 
 export async function POST(req: Request) {
     const secret = process.env.SCRAPE_SECRET;
@@ -11,16 +13,18 @@ export async function POST(req: Request) {
     }
 
     try {
-        const { url } = await req.json();
-        if (!url) {
+        const body = await req.json();
+        const rawUrl = typeof body?.url === "string" ? body.url.trim() : "";
+        if (!rawUrl) {
             return NextResponse.json({ error: "url is required" }, { status: 400 });
         }
 
-        if (!isAllowedAmazonUrl(url)) {
-            return NextResponse.json({ error: "Only amazon.* product URLs are allowed" }, { status: 400 });
+        if (!parseProductUrl(rawUrl)) {
+            return NextResponse.json({ error: "Enter a valid http(s) product URL" }, { status: 400 });
         }
 
-        const scraped = await scrapeAmazonProduct(url);
+        const url = normalizeProductUrl(rawUrl);
+        const scraped = await scrapeProduct(url);
 
         let record: ProductRecord;
         try {
@@ -42,8 +46,11 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ product: record }, { status: 200 });
     } catch (error) {
-        if (error instanceof ScraperBlockedError) {
-            console.error("Scraping blocked:", error.message);
+        if (error instanceof UnsafeUrlError) {
+            return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+        if (error instanceof ScraperBlockedError || error instanceof SiteScrapeError) {
+            console.error("Scraping failed:", error.message);
             return NextResponse.json({ error: error.message }, { status: 502 });
         }
         console.error("Scraping error:", error);
