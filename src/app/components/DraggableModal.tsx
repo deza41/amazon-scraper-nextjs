@@ -58,7 +58,7 @@ export default function DraggableModal({ isOpen, onClose, initialUrl }: Draggabl
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="fixed z-50 bg-white rounded-lg overflow-hidden shadow-2xl"
+            className="fixed z-50 bg-card text-card-foreground rounded-2xl overflow-hidden border shadow-2xl"
             style={{
                 width: mWidth,
                 height: mHeight,
@@ -68,9 +68,9 @@ export default function DraggableModal({ isOpen, onClose, initialUrl }: Draggabl
             }}
         >
             <div className="flex flex-col h-full">
-                <div className="flex justify-between items-center p-4 border-b bg-gray-100 cursor-move">
-                    <h3 className="text-lg font-semibold">Amazon Browser</h3>
-                    <Button variant="ghost" size="icon" onClick={onClose}>
+                <div className="flex justify-between items-center px-4 py-3 border-b bg-muted/60 cursor-move select-none">
+                    <h3 className="text-sm font-semibold">Amazon Browser</h3>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} aria-label="Close">
                         <X className="h-4 w-4" />
                     </Button>
                 </div>
@@ -84,23 +84,24 @@ export default function DraggableModal({ isOpen, onClose, initialUrl }: Draggabl
                         onLoad={() => setCurrentUrl(initialUrl)}
                     />
                 </div>
-                <div className="p-4 border-t bg-gray-100">
-                    <div className="flex items-center mb-2">
+                <div className="p-3 border-t bg-muted/60">
+                    <div className="flex items-center gap-2">
                         <input
                             type="text"
                             value={currentUrl}
                             readOnly
-                            className="flex-grow p-2 border rounded mr-2 text-sm"
+                            aria-label="Current URL"
+                            className="flex-grow h-8 px-3 border border-input rounded-lg bg-card text-xs text-muted-foreground min-w-0"
                         />
-                        <Button onClick={copyToClipboard} size="sm">
-                            <Copy className="mr-2 h-4 w-4" />
+                        <Button onClick={copyToClipboard} size="sm" variant="secondary">
+                            <Copy />
                             {copied ? 'Copied!' : 'Copy'}
                         </Button>
-                        <Button onClick={refreshIframe} size="sm" className="ml-2">
-                            <RefreshCw className="h-4 w-4" />
+                        <Button onClick={refreshIframe} size="sm" variant="secondary" aria-label="Refresh">
+                            <RefreshCw />
                         </Button>
-                        <Button onClick={openInNewTab} size="sm" className="ml-2">
-                            <ArrowUpRight className="h-4 w-4" />
+                        <Button onClick={openInNewTab} size="sm" variant="secondary" aria-label="Open in new tab">
+                            <ArrowUpRight />
                         </Button>
                     </div>
                 </div>

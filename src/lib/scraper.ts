@@ -19,15 +19,19 @@ function sleep(ms: number) {
 }
 
 export class ScraperBlockedError extends Error {
-    constructor(url: string, cause?: unknown, usedApiKey = true) {
+    constructor(url: string, cause?: unknown, usedApiKey = true, keyRejected = false) {
         const causeMessage = cause instanceof Error ? cause.message : undefined;
         const parts = [
             `Amazon blocked scraping requests for ${url} after retrying${usedApiKey ? " with rendering enabled" : ""}.`,
         ];
         if (causeMessage) parts.push(`Last error: ${causeMessage}.`);
-        if (!usedApiKey) {
+        if (keyRejected) {
             parts.push(
-                "No SCRAPER_API key is configured, so requests were sent directly and are blocked more easily — set SCRAPER_API for better reliability."
+                "ScraperAPI rejected the SCRAPER_API key for this request (HTTP 403, plan doesn't allow it), so the request fell back to a direct fetch, which Amazon blocks more easily. Check your ScraperAPI plan/credits."
+            );
+        } else if (!usedApiKey) {
+            parts.push(
+                "No SCRAPER_API key is configured in this environment, so requests were sent directly and are blocked more easily — set SCRAPER_API (and redeploy, since Vercel env vars only apply to new deployments)."
             );
         }
         super(parts.join(" "));
@@ -99,6 +103,7 @@ async function fetchDirect(url: string): Promise<string> {
  */
 export async function fetchAmazonHtml(url: string): Promise<string> {
     let apiKey = process.env.SCRAPER_API;
+    let keyRejected = false;
     const attempts: FetchOptions[] = apiKey
         ? [{ render: false }, { render: false }, { render: true }, { render: true }]
         : [{ render: false }, { render: false }, { render: false }, { render: false }];
@@ -118,6 +123,7 @@ export async function fetchAmazonHtml(url: string): Promise<string> {
             if (apiKey && requiresPaidPlan(err)) {
                 console.warn(`SCRAPER_API key can't access ${url} (requires a paid plan) — falling back to direct requests`);
                 apiKey = undefined;
+                keyRejected = true;
             }
         }
 
@@ -127,7 +133,7 @@ export async function fetchAmazonHtml(url: string): Promise<string> {
     }
 
     console.error(`Failed to fetch ${url}:`, lastError);
-    throw new ScraperBlockedError(url, lastError, Boolean(apiKey));
+    throw new ScraperBlockedError(url, lastError, Boolean(apiKey), keyRejected);
 }
 
 function cleanPrice(text: string): number | null {
