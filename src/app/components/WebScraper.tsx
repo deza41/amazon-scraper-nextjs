@@ -78,6 +78,7 @@ export default function WebScraper() {
     const [productToDelete, setProductToDelete] = useState<ProductRecord | null>(null)
     const [search, setSearch] = useState('')
     const [loading, setLoading] = useState(false)
+    const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null)
     const [initialLoading, setInitialLoading] = useState(true)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [listView, setListView] = useState(false)
@@ -265,10 +266,14 @@ export default function WebScraper() {
         setLoading(true)
         const dismissWarning = warnIfSlow(products.map((product) => product.url))
 
+        const total = products.length
         const concurrentFetches = 5
         const queue = [...products]
         let succeeded = 0
         let failed = 0
+        const progressText = () => `Refreshing ${succeeded + failed} of ${total} products${failed ? ` (${failed} failed)` : ""}`
+        const progressToast = toast.loading(progressText())
+        setRefreshProgress({ done: 0, total })
 
         const worker = async () => {
             while (queue.length > 0) {
@@ -280,19 +285,23 @@ export default function WebScraper() {
                 } catch {
                     failed += 1
                 }
+                setRefreshProgress({ done: succeeded + failed, total })
+                toast.loading(progressText(), { id: progressToast })
             }
         }
 
         await Promise.all(
-            Array.from({ length: Math.min(concurrentFetches, products.length) }, worker)
+            Array.from({ length: Math.min(concurrentFetches, total) }, worker)
         )
 
         dismissWarning()
+        toast.dismiss(progressToast)
+        setRefreshProgress(null)
         setLoading(false)
         if (failed === 0) {
             toast.success(`Refreshed ${succeeded} product${succeeded === 1 ? '' : 's'}`)
         } else {
-            toast.warning(`Refreshed ${succeeded} product${succeeded === 1 ? '' : 's'}, ${failed} failed`)
+            toast.warning(`Refreshed ${succeeded} of ${total} products, ${failed} failed`)
         }
     }
 
@@ -408,7 +417,7 @@ export default function WebScraper() {
                                     />
                                     <Button variant="outline" onClick={refreshAllProducts} disabled={loading} className="h-10">
                                         <RefreshCw className={loading ? "animate-spin" : ""} />
-                                        Refresh All
+                                        {refreshProgress ? `Refreshing ${refreshProgress.done}/${refreshProgress.total}` : "Refresh All"}
                                     </Button>
                                     <div className="flex rounded-lg border bg-card p-0.5 shadow-sm" role="group" aria-label="View mode">
                                         <Tooltip>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
-import { TrendingDown, TrendingUp, Minus } from "lucide-react"
+import { useEffect, useMemo, useState, type PointerEvent } from "react"
+import { Hourglass, TrendingDown, TrendingUp, Minus } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { PriceTrendPoint } from "@/lib/pocketbase"
 
@@ -20,18 +20,18 @@ const parseDate = (value: string) => new Date(value.replace(" ", "T"))
 const shortDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" })
 const longDate = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" })
 
+// The measured element mounts only after the data loads, so track it with a callback ref
+// (an effect on mount would run while the skeleton is showing and never see it).
 function useWidth() {
-    const ref = useRef<HTMLDivElement>(null)
+    const [el, setEl] = useState<HTMLDivElement | null>(null)
     const [width, setWidth] = useState(0)
     useEffect(() => {
-        const el = ref.current
         if (!el) return
         const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
         observer.observe(el)
-        setWidth(el.getBoundingClientRect().width)
         return () => observer.disconnect()
-    }, [])
-    return [ref, width] as const
+    }, [el])
+    return [setEl, width] as const
 }
 
 /** Round the domain outwards to tidy tick values. */
@@ -91,7 +91,16 @@ export default function PriceTrendChart({ productId, refreshKey, formatPrice }: 
         return <p className="text-sm text-muted-foreground">Couldn&apos;t load the price history.</p>
     }
     if (points === null) {
-        return <Skeleton className="h-[190px] w-full" />
+        return (
+            <div role="status" aria-busy="true" aria-label="Loading price history">
+                <div className="mb-3 flex gap-4">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-24" />
+                </div>
+                <Skeleton className="h-[190px] w-full" />
+            </div>
+        )
     }
     if (points.length === 0) {
         return (
@@ -129,14 +138,26 @@ export default function PriceTrendChart({ productId, refreshKey, formatPrice }: 
 
     return (
         <div>
-            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                <span className="inline-flex items-center gap-1.5 font-medium">
-                    <TrendIcon className="h-4 w-4" aria-hidden />
-                    {points.length > 1 ? changeLabel : "Tracking started"}
-                </span>
-                <span className="text-muted-foreground">Lowest {formatPrice(low)}</span>
-                <span className="text-muted-foreground">Highest {formatPrice(high)}</span>
-            </div>
+            {points.length > 1 ? (
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                        <TrendIcon className="h-4 w-4" aria-hidden />
+                        {changeLabel}
+                    </span>
+                    <span className="text-muted-foreground">Lowest {formatPrice(low)}</span>
+                    <span className="text-muted-foreground">Highest {formatPrice(high)}</span>
+                </div>
+            ) : (
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                        <Hourglass className="h-4 w-4" aria-hidden />
+                        Collecting data
+                    </span>
+                    <span className="text-muted-foreground">
+                        {formatPrice(last.price)} on {longDate.format(parseDate(last.recorded_at))}
+                    </span>
+                </div>
+            )}
 
             <div ref={containerRef} className="relative w-full">
                 {layout ? (
@@ -216,13 +237,24 @@ export default function PriceTrendChart({ productId, refreshKey, formatPrice }: 
                             </div>
                         )}
                     </>
-                ) : (
-                    points.length < 2 && (
-                        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                            {formatPrice(last.price)} recorded on {longDate.format(parseDate(last.recorded_at))}. The chart appears once there are two or more days of data.
+                ) : points.length === 1 ? (
+                    // Only one day recorded: show an empty, pulsing chart frame instead of a bare message.
+                    <div
+                        className="relative flex items-center justify-center overflow-hidden rounded-lg border border-dashed bg-muted/30"
+                        style={{ height: HEIGHT }}
+                    >
+                        <div className="absolute inset-x-0 top-[25%] border-t border-dashed" aria-hidden />
+                        <div className="absolute inset-x-0 top-[50%] border-t border-dashed" aria-hidden />
+                        <div className="absolute inset-x-0 top-[75%] border-t border-dashed" aria-hidden />
+                        <span className="absolute left-6 top-1/2 h-3 w-3 -translate-y-1/2" aria-hidden>
+                            <span className="absolute inset-0 animate-ping rounded-full bg-brand/40" />
+                            <span className="absolute inset-0 rounded-full border-2 border-card bg-brand" />
+                        </span>
+                        <p className="relative max-w-[16rem] rounded-md bg-card/90 px-3 py-2 text-center text-sm text-muted-foreground shadow-sm">
+                            The line appears after the next daily price update.
                         </p>
-                    )
-                )}
+                    </div>
+                ) : null}
             </div>
 
             <table className="sr-only">
