@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, type FormEvent } from "react"
 import { toast } from "sonner"
-import { Search, Trash2, RefreshCw, Link as LinkIcon, List, LayoutGrid, ExternalLink, PackageSearch, Puzzle } from "lucide-react"
+import { Search, Trash2, RefreshCw, Link as LinkIcon, List, LayoutGrid, ExternalLink, PackageSearch, Puzzle, ChevronLeft, ChevronRight } from "lucide-react"
 import StarRating from "./StarRating"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -86,6 +86,7 @@ export default function WebScraper() {
     const [helperVersion, setHelperVersion] = useState<string | null>(null)
     const [helperDialogOpen, setHelperDialogOpen] = useState(false)
     const modalRef = useRef<HTMLDivElement>(null)
+    const [navVisible, setNavVisible] = useState(false)
 
     const closeModal = useCallback(() => setSelectedProduct(null), [])
 
@@ -225,6 +226,48 @@ export default function WebScraper() {
             }
         }
     }
+
+    // Previous/next walk the list as currently filtered and sorted, so search results can be flicked through.
+    const selectedIndex = selectedProduct ? activeProducts.findIndex((p) => p.id === selectedProduct.id) : -1
+    const prevProduct = selectedIndex > 0 ? activeProducts[selectedIndex - 1] : null
+    const nextProduct = selectedIndex >= 0 && selectedIndex < activeProducts.length - 1 ? activeProducts[selectedIndex + 1] : null
+    // Not while a refresh is running: it would snap the modal back to the product being refreshed.
+    const canNavigate = !loading && !isDeleteDialogOpen
+
+    // The prev/next buttons stay hidden until the pointer is outside the modal (over the dimmed backdrop).
+    // They are DOM children of the modal, so hovering the buttons themselves counts as "outside".
+    const modalOpen = selectedProduct !== null
+    useEffect(() => {
+        if (!modalOpen) return
+        const handlePointerMove = (event: PointerEvent) => {
+            const target = event.target as HTMLElement | null
+            const insideModal = !!target && !!modalRef.current?.contains(target) && !target.closest("[data-modal-nav]")
+            setNavVisible(!insideModal)
+        }
+        const hide = () => setNavVisible(false)
+        window.addEventListener("pointermove", handlePointerMove)
+        document.addEventListener("mouseleave", hide)
+        return () => {
+            window.removeEventListener("pointermove", handlePointerMove)
+            document.removeEventListener("mouseleave", hide)
+            setNavVisible(false)
+        }
+    }, [modalOpen])
+
+    useEffect(() => {
+        if (!selectedProduct) return
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (!canNavigate || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+            const target = event.target as HTMLElement | null
+            if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return
+            const destination = event.key === "ArrowLeft" ? prevProduct : event.key === "ArrowRight" ? nextProduct : null
+            if (!destination) return
+            event.preventDefault()
+            handleProductClick(destination)
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [selectedProduct, prevProduct, nextProduct, canNavigate])
 
     const openDeleteDialog = (product: ProductRecord) => {
         setProductToDelete(product)
@@ -551,14 +594,14 @@ export default function WebScraper() {
                     )}
 
                     <Dialog open={selectedProduct !== null} onOpenChange={closeModal}>
-                        <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-[640px]" ref={modalRef}>
+                        <DialogContent className="flex max-h-[calc(100dvh-7rem)] flex-col gap-0 p-0 sm:max-w-[640px] md:max-h-[90vh]" ref={modalRef}>
                             <DialogHeader className="space-y-2 border-b px-6 py-4 pr-12 text-left">
                                 {selectedProduct?.url && <StoreChip url={selectedProduct.url} />}
                                 <DialogTitle className="line-clamp-2 text-base font-semibold leading-snug">
                                     {selectedProduct?.name}
                                 </DialogTitle>
                             </DialogHeader>
-                            <div className="flex-1 overflow-auto px-6 py-5">
+                            <div key={selectedProduct?.id} className="flex-1 overflow-auto px-6 py-5">
                                 <div className="mb-6 flex h-52 items-center justify-center rounded-xl bg-white">
                                     {selectedProduct?.image ? (
                                         // eslint-disable-next-line @next/next/no-img-element
@@ -694,6 +737,33 @@ export default function WebScraper() {
                                     </AlertDialog>
                                 </div>
                             </DialogFooter>
+
+                            {/* Children of the dialog content (so Radix doesn't treat clicks as "outside"), positioned just outside it:
+                                beside the modal on wide screens, beneath it on narrow ones. */}
+                            {[
+                                { label: "Previous product", target: prevProduct, Icon: ChevronLeft, position: "left-0 md:-left-14" },
+                                { label: "Next product", target: nextProduct, Icon: ChevronRight, position: "right-0 md:-right-14" },
+                            ].map(({ label, target, Icon, position }) => (
+                                <Button
+                                    key={label}
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    aria-label={label}
+                                    title={label}
+                                    disabled={!target || !canNavigate}
+                                    onClick={() => target && handleProductClick(target)}
+                                    data-modal-nav
+                                    // Hidden until the pointer leaves the modal; touch screens can't hover, so they always show.
+                                    className={`absolute top-full mt-1.5 h-9 w-9 rounded-full border bg-card/90 shadow-md backdrop-blur duration-200 focus-visible:opacity-100 md:top-1/2 md:mt-0 md:h-10 md:w-10 md:-translate-y-1/2 ${position} ${
+                                        navVisible
+                                            ? "opacity-100 disabled:opacity-30"
+                                            : "opacity-0 disabled:opacity-0 [@media(hover:none)]:opacity-100 [@media(hover:none)]:disabled:opacity-30"
+                                    }`}
+                                >
+                                    <Icon className="h-5 w-5" />
+                                </Button>
+                            ))}
                         </DialogContent>
                     </Dialog>
                 </div>
