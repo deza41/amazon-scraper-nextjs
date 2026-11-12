@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pb, PRODUCTS_COLLECTION, type ProductRecord } from "@/lib/pocketbase";
+import { recordPricePoint } from "@/lib/price-history";
 import { scrapeProduct } from "@/lib/scrape-product";
 
 // Vercel Hobby plan caps function duration at 60s and cron jobs at one run/day
@@ -14,10 +15,11 @@ const TIME_BUDGET_MS = 50_000;
 
 async function refreshProduct(product: ProductRecord) {
     const scraped = await scrapeProduct(product.url);
-    await pb.collection(PRODUCTS_COLLECTION).update<ProductRecord>(product.id, {
+    const updated = await pb.collection(PRODUCTS_COLLECTION).update<ProductRecord>(product.id, {
         ...scraped,
         is_refreshed: true,
     });
+    await recordPricePoint(updated);
 }
 
 async function runPool(products: ProductRecord[], concurrency: number, deadline: number) {

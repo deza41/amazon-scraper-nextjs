@@ -1,8 +1,15 @@
 import { ClientResponseError } from "pocketbase";
+import { recordPricePoint } from "./price-history";
 import { pb, PRODUCTS_COLLECTION, type ProductRecord, type ScrapedProduct } from "./pocketbase";
 
-/** Creates the product, or updates it (flagged as refreshed) if its URL is already tracked. */
+/** Creates the product, or updates it (flagged as refreshed) if its URL is already tracked. Also records today's price. */
 export async function upsertProduct(scraped: ScrapedProduct): Promise<ProductRecord> {
+    const record = await saveProduct(scraped);
+    await recordPricePoint(record);
+    return record;
+}
+
+async function saveProduct(scraped: ScrapedProduct): Promise<ProductRecord> {
     const collection = pb.collection(PRODUCTS_COLLECTION);
     try {
         const existing = await collection.getFirstListItem<ProductRecord>(pb.filter("url = {:url}", { url: scraped.url }));

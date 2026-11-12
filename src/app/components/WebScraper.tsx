@@ -20,6 +20,7 @@ import { getSlowSiteName, storeNameFromUrl } from "@/lib/sites"
 import { NoHelperError, scrapeProductUrl } from "@/lib/scrape-client"
 import { getExtensionVersion } from "@/lib/extension-bridge"
 import BrowserHelperDialog from "./BrowserHelperDialog"
+import PriceTrendChart from "./PriceTrendChart"
 
 const AMAZON_HOMEPAGE = "https://www.amazon.com.au/"
 
@@ -562,6 +563,17 @@ export default function WebScraper() {
                                     )}
                                 </div>
 
+                                {selectedProduct && (
+                                    <section className="mb-6 border-b pb-6">
+                                        <h3 className={`${detailLabel} mb-3`}>Price trend</h3>
+                                        <PriceTrendChart
+                                            productId={selectedProduct.id}
+                                            refreshKey={selectedProduct.updated}
+                                            formatPrice={(price) => formatPrice(price, selectedCurrency) ?? ""}
+                                        />
+                                    </section>
+                                )}
+
                                 <div className="divide-y">
                                     {formatPrice(selectedProduct?.price ?? null, selectedCurrency) && (
                                         <div className={detailRow}>
@@ -657,7 +669,7 @@ export default function WebScraper() {
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                                 <AlertDialogDescription>
-                                                    This action cannot be undone. This will permanently delete the product from your PocketBase database.
+                                                    This action cannot be undone. This will permanently delete the product and its price history from your PocketBase database.
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
